@@ -1,0 +1,136 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "School Lunch Application API",
+    "version": "0.1.0",
+    "description": "Internal API for school search and lunch menu lookup."
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is ready",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Health" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schools": {
+      "get": {
+        "operationId": "searchSchools",
+        "description": "Searches after trimming `query`; blank queries are rejected.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching schools, possibly empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/School" }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "504": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/meals": {
+      "get": {
+        "operationId": "getLunchMeals",
+        "description": "Returns only lunch. `from` and `to` are inclusive ISO dates, `from` must not be later than `to`, and the range is at most 31 days.",
+        "parameters": [
+          { "name": "officeCode", "in": "query", "required": true, "schema": { "type": "string", "minLength": 1 } },
+          { "name": "schoolCode", "in": "query", "required": true, "schema": { "type": "string", "minLength": 1 } },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lunch meals in ascending date order, possibly empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Meal" }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "504": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "example": "ok" } }
+      },
+      "School": {
+        "type": "object",
+        "required": ["officeCode", "schoolCode", "name"],
+        "properties": {
+          "officeCode": { "type": "string" },
+          "schoolCode": { "type": "string" },
+          "name": { "type": "string" },
+          "schoolType": { "type": "string", "nullable": true },
+          "location": { "type": "string", "nullable": true },
+          "address": { "type": "string", "nullable": true }
+        }
+      },
+      "Meal": {
+        "type": "object",
+        "required": ["date", "mealType", "menu"],
+        "properties": {
+          "date": { "type": "string", "format": "date" },
+          "mealType": { "type": "string", "example": "중식" },
+          "menu": { "type": "string" },
+          "calories": { "type": "string", "nullable": true },
+          "nutrition": { "type": "string", "nullable": true },
+          "origin": { "type": "string", "nullable": true }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message", "requestId"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "field": { "type": "string", "nullable": true },
+          "requestId": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Invalid request input",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "UpstreamError": {
+        "description": "NEIS service failure",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}

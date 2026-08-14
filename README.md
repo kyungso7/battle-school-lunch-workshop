@@ -49,12 +49,61 @@ NEIS 공개 API를 활용해 초중고 급식 메뉴를 조회하고 AI 에이�
 
 ## 저장소 구성
 
-| 경로    | 설명                                 |
-|---------|--------------------------------------|
+| 경로 | 설명 |
+| --- | --- |
 | `data/` | API 명세 작성에 사용하는 원본 데이터 |
-| `docs/` | 단계별 워크숍 가이드                 |
+| `docs/` | 단계별 워크숍 가이드 |
+| `src/web/` | React, TypeScript, Vite 기반 사용자 인터페이스 |
+| `src/api/` | FastAPI 기반 NEIS 프록시 API |
+| `src/e2e/` | Playwright 사용자 흐름 테스트 |
 
-프론트엔드, 백엔드 및 배포 관련 소스는 워크숍을 진행하면서 참가자의 저장소에 생성됩니다.
+## 구현된 앱 실행
+
+앱 구현 단계까지 완료한 저장소에서는 Node.js 24+, Python 3.12+와
+[uv](https://docs.astral.sh/uv/), Docker Compose(컨테이너 실행 시)가 필요합니다.
+
+루트 `.env.example`을 `.env`로 복사하고 `NEIS_API_KEY`를 설정한 뒤, 운영체제에
+맞는 스크립트 하나로 API와 웹 앱을 함께 실행할 수 있습니다.
+
+```powershell
+pwsh ./scripts/run-dev.ps1
+```
+
+```bash
+bash ./scripts/run-dev.sh
+```
+
+두 스크립트 모두 필요한 의존성을 준비하고 API와 웹 개발 서버를 시작합니다. 웹 앱은
+`http://localhost:5173`, API 상태 확인은 `http://localhost:8000/api/health`에서
+접근할 수 있으며 `Ctrl+C`로 두 서버를 함께 종료합니다.
+
+웹 앱은 개발 중 `/api` 요청을 `http://localhost:8000`으로 프록시합니다. 실제
+NEIS 조회에는 `NEIS_API_KEY` 환경 변수를 API 프로세스에 설정해야 합니다.
+
+### 테스트
+
+```bash
+cd src/web && npm run lint && npm test && npm run build
+cd src/api && uv sync --all-groups --frozen && uv run pytest
+cd src/e2e && npm ci && npx playwright install chromium && npm test
+```
+
+Playwright 테스트는 웹 미리보기 서버를 시작하고 모든 `/api/*` 요청을 모킹하므로
+NEIS API 키나 외부 네트워크를 사용하지 않습니다.
+
+### Docker Compose
+
+```bash
+cp .env.example .env
+# .env의 NEIS_API_KEY를 실제 키로 교체합니다.
+docker compose config
+docker compose up -d --build
+docker compose ps
+docker compose down
+```
+
+Compose는 `${WEB_PORT:-8080}`의 웹 서비스만 호스트에 노출합니다. nginx가 동일
+오리진의 `/api` 요청을 내부 API 컨테이너로 프록시합니다.
 
 ## 추가 학습 자료
 
