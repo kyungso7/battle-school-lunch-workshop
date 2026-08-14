@@ -21,14 +21,14 @@
 ```text
 /
 ├── .github/                 이슈·PR 템플릿, CODEOWNERS, CI
-├── .devcontainer/           Codespaces 개발 환경
 ├── AGENTS.md                AI 코딩 에이전트 작업 지침
 ├── PRD.md                   제품 요구사항
 ├── TRD.md                   기술 요구사항과 아키텍처 결정
 ├── compose.yaml             API와 Web 컨테이너 오케스트레이션
 ├── .env.example             환경 변수 예시
-├── openapi.json             현재 저장소의 NEIS API 계약
-├── data/                    원본 NEIS 명세와 계약 자료
+├── openapi.json             외부 NEIS API 계약
+├── data/                    원본 NEIS 명세 자료
+├── scripts/                 API와 Web 동시 실행 스크립트
 └── src/
     ├── api/                 FastAPI 백엔드
     │   ├── app/             앱 설정, 스키마, NEIS 클라이언트, 라우터
@@ -37,12 +37,12 @@
     │   ├── pyproject.toml
     │   └── uv.lock
     ├── web/                 React·TypeScript 프런트엔드
-    │   ├── src/pages/       라우팅 페이지
-    │   ├── src/components/  UI 컴포넌트
+    │   ├── src/App.tsx      3단계 급식 조회 UI와 상태 전이
     │   ├── src/lib/api.ts   백엔드 API 호출 래퍼
-    │   └── src/test/        MSW와 통합 테스트 인프라
-    ├── e2e/                 Playwright E2E 테스트
-    └── openapi.json         앱 구현 시 사용하는 NEIS API 계약 사본
+    │   ├── src/test/        MSW와 통합 테스트 인프라
+    │   └── nginx.conf       정적 자산 및 /api 역방향 프록시
+    ├── e2e/                 Playwright E2E 테스트와 공용 fixture
+    └── openapi.json         프런트엔드-백엔드 내부 API 계약
 ```
 
 ### 백엔드 구조
@@ -55,18 +55,19 @@
 
 ### 프런트엔드 구조
 
-- `src/web/src/pages/`: 학교 검색, 날짜 선택, 급식 결과 페이지
-- `src/web/src/components/ui/`: 재사용 가능한 프레젠테이션 컴포넌트
+- `src/web/src/App.tsx`: 학교 검색, 날짜 선택, 급식 결과의 3단계 상태와 UI
 - `src/web/src/lib/api.ts`: 모든 `/api/*` 요청을 캡슐화하는 유일한 호출 경계
-- `src/web/src/test/`: Testing Library 헬퍼, MSW 핸들러, 통합 테스트
+- `src/web/src/styles.css`: Tailwind CSS v4와 애플리케이션 디자인 스타일
+- `src/web/src/test/`: Testing Library 설정, MSW 핸들러, 사용자 흐름 통합 테스트
+- `src/web/vite.config.ts`: React·Tailwind 플러그인, `/api` 개발 프록시, Vitest 설정
 
 ## 런타임과 도구
 
 | 영역 | 런타임·패키지 관리자 | 주요 도구 |
 | --- | --- | --- |
 | 백엔드 | Python 3.12+, `uv` | FastAPI, Uvicorn, Pydantic, httpx, pytest, respx |
-| 프런트엔드 | Node.js 22+ (24 LTS 권장), npm 10+ | React 19, TypeScript, Vite, ESLint, Vitest, RTL, MSW |
-| E2E | Node.js 22+ (24 LTS 권장), npm 10+ | Playwright, Chromium |
+| 프런트엔드 | Node.js 24+, npm 10+ | React 19, TypeScript, Vite, ESLint, Vitest, RTL, MSW |
+| E2E | Node.js 24+, npm 10+ | Playwright, Chromium |
 | 컨테이너 | Docker 24+와 Compose 플러그인 | nginx, Docker Compose |
 
 ## 설치, 실행 및 검증 명령
@@ -74,6 +75,20 @@
 명령은 각 제목에 표시된 작업 디렉터리에서 실행합니다. CI나 재현 가능한 검증에서는
 `npm install` 대신 `npm ci`, `uv sync` 대신 `uv sync --all-groups --frozen`을
 사용합니다.
+
+### 전체 개발 환경 (저장소 루트)
+
+루트 `.env`에 유효한 `NEIS_API_KEY`를 설정한 후 운영체제에 맞는 명령을 사용합니다.
+두 스크립트는 의존성을 준비하고 API(`8000`)와 Web(`5173`)을 함께 실행하며,
+`Ctrl+C`로 두 프로세스를 모두 종료합니다.
+
+```powershell
+pwsh ./scripts/run-dev.ps1
+```
+
+```bash
+bash ./scripts/run-dev.sh
+```
 
 ### 백엔드 (`src/api/`)
 
@@ -84,7 +99,6 @@ uv run uvicorn app.main:app --reload --port 8000
 uv run pytest
 uv run pytest -m unit
 uv run pytest -m integration
-uv run pytest --cov=app
 ```
 
 Python 전용 포매터나 린터는 현재 구성되어 있지 않습니다. 임의의 도구를 새로 도입하지
@@ -104,14 +118,13 @@ npm run preview
 
 - `npm run lint`는 ESLint 검사입니다.
 - `npm run build`는 `tsc -b` 타입 검사 후 Vite 프로덕션 빌드를 수행합니다.
-- 포맷은 루트 `.prettierrc`를 따릅니다. 저장소에 Prettier 스크립트가 추가된 경우
-  `npm run format`과 `npm run format:check`를 사용하고, 스크립트가 없다면 존재하지
-  않는 명령을 문서화하거나 실행하지 않습니다.
+- 현재 Prettier나 별도 포맷 스크립트는 구성되어 있지 않습니다. 존재하지 않는
+  `format` 명령을 실행하거나 문서화하지 말고 기존 코드 스타일을 유지합니다.
 
 ### E2E (`src/e2e/`)
 
 ```bash
-npm install
+npm ci
 npx playwright install chromium
 npm test
 npm run test:headed
@@ -138,10 +151,12 @@ docker compose down
 
 ### API와 데이터 계약
 
-- `openapi.json`과 앱에 포함된 `src/openapi.json`을 NEIS API 계약의 단일 원본으로
-  취급합니다. `data/openapi.json`이 존재하는 브랜치에서는 해당 파일이 우선 계약이며,
-  사본 간 차이가 생기지 않도록 함께 검증합니다.
-- OpenAPI의 필드명, 필수 여부, 날짜 형식과 응답 구조를 임의로 변경하지 않습니다.
+- 루트 `openapi.json`은 외부 NEIS의 `/schoolInfo`와 `/mealServiceDietInfo` 계약입니다.
+  `src/openapi.json`은 브라우저와 FastAPI 사이의 `/api/*` 내부 계약입니다. 두 문서의
+  역할을 섞거나 한쪽의 응답 구조를 다른 쪽에 그대로 노출하지 않습니다.
+- 내부 계약을 변경할 때 `src/openapi.json`, Pydantic 스키마, 프런트엔드 TypeScript
+  타입과 관련 테스트를 같은 변경에서 갱신합니다.
+- 외부 OpenAPI의 필드명, 필수 여부, 날짜 형식과 응답 구조를 임의로 변경하지 않습니다.
 - 백엔드 요청·응답은 `schemas.py`의 타입이 지정된 Pydantic 모델로 정의합니다.
 - 외부 NEIS 호출은 `neis_client.py`를 통해서만 수행하고 타임아웃과 NEIS 오류를
   명시적인 API 오류로 변환합니다.
@@ -160,8 +175,10 @@ docker compose down
 - Python 의존성은 `src/api/`에서 `uv add`로 변경하고 `uv.lock`을 함께 갱신합니다.
 - 프런트엔드와 E2E 의존성은 해당 디렉터리에서 npm으로 변경하고
   `package-lock.json`을 함께 갱신합니다.
-- 락 파일, `dist/`, `coverage/`, `playwright-report/` 같은 생성 파일을 직접
-  편집하거나 커밋하지 않습니다.
+- `dist/`, `coverage/`, `playwright-report/`, `test-results/` 같은 생성 파일을 직접
+  편집하거나 커밋하지 않습니다. 락 파일은 패키지 관리자로만 갱신합니다.
+- 개발 서버 시작 방식이나 포트를 변경할 때 `scripts/run-dev.ps1`,
+  `scripts/run-dev.sh`, Vite 프록시와 README를 함께 갱신합니다.
 - Dockerfile과 `compose.yaml`의 non-root 사용자, `cap_drop: ALL`,
   `no-new-privileges`, read-only 루트 파일시스템을 약화시키지 않습니다.
 
@@ -171,7 +188,7 @@ docker compose down
 | --- | --- | --- | --- |
 | API 단위 | `src/api/tests/unit/` | `uv run pytest -m unit` | I/O 없음 |
 | API 통합 | `src/api/tests/integration/` | `uv run pytest -m integration` | NEIS HTTP를 respx로 모킹 |
-| Web 단위·통합 | `src/web/src/**/*.test.*`, `src/web/src/test/integration/` | `npm test` | `/api/*`를 MSW로 모킹 |
+| Web 통합 | `src/web/src/test/` | `npm test` | `/api/*`를 MSW로 모킹 |
 | E2E | `src/e2e/tests/` | `npm test` | `/api/*`를 `page.route`로 모킹 |
 
 - 테스트는 실제 NEIS 서비스나 실제 API 키에 의존하지 않습니다.
